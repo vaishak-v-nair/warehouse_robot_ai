@@ -10,10 +10,14 @@ __pycache__/
 *.pyc
 
 # Large datasets and generated artifacts
-data/raw/coco2017/
-data/processed/ml_dataset/
-results/crops/
-results/annotated_images/
+data/raw/coco2017/*
+!data/raw/coco2017/.placeholder
+data/processed/ml_dataset/*
+!data/processed/ml_dataset/.placeholder
+results/crops/*
+!results/crops/.placeholder
+results/annotated_images/*
+!results/annotated_images/.placeholder
 
 # Model binaries
 *.pth
