@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+
+# Editor
+.vscode/
+
+# Large datasets and generated artifacts
+data/raw/coco2017/
+data/processed/ml_dataset/
+results/crops/
+results/annotated_images/
