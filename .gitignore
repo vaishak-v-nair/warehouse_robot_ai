@@ -5,8 +5,15 @@
 # Editor
 .vscode/
 
+# Python cache/build
+__pycache__/
+*.pyc
+
 # Large datasets and generated artifacts
 data/raw/coco2017/
 data/processed/ml_dataset/
 results/crops/
 results/annotated_images/
+
+# Model binaries
+*.pth
