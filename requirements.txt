@@ -1,0 +1,13 @@
+faiss-cpu
+matplotlib
+numpy
+opencv-python
+pillow
+python-dotenv
+requests
+scikit-learn
+seaborn
+sentence-transformers
+torch
+torchvision
+tqdm

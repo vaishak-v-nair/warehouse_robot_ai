@@ -1,31 +1,48 @@
+import argparse
+from pathlib import Path
+
+import cv2
+import numpy as np
 import torch
-from PIL import Image
 import torchvision.transforms as transforms
-import os
-from vision.detector import WarehouseObjectDetector
+from PIL import Image
+
 from ml.model import get_model
-from rag.retriever import query_rag
+from vision.detector import WarehouseObjectDetector
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-MODEL_PATH = "ml/saved_models/best_model.pth"
+MODEL_PATH = Path("ml/saved_models/best_model.pth")
 IMAGE_SIZE = 224
-
-model = get_model(num_classes=4)
-model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
-model.to(DEVICE)
-model.eval()
-
-transform = transforms.Compose([
-    transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-    transforms.ToTensor()
-])
-
 CLASS_NAMES = ["FRAGILE", "HAZARDOUS", "HEAVY", "STANDARD"]
+DEFAULT_TEST_IMAGE = Path("data/processed/ml_dataset/test/FRAGILE/201436_84179.jpg")
 
-detector = WarehouseObjectDetector(debug=False)
+_model = None
+_transform = None
+_detector = None
 
 
-def classify_crop(crop_image):
+def _load_components():
+    global _model, _transform, _detector
+
+    if _model is None:
+        _model = get_model(num_classes=4)
+        _model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
+        _model.to(DEVICE)
+        _model.eval()
+
+    if _transform is None:
+        _transform = transforms.Compose([
+            transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+            transforms.ToTensor()
+        ])
+
+    if _detector is None:
+        _detector = WarehouseObjectDetector(debug=False)
+
+    return _model, _transform, _detector
+
+
+def classify_crop(crop_image, model, transform):
     tensor = transform(crop_image).unsqueeze(0).to(DEVICE)
 
     with torch.no_grad():
@@ -40,10 +57,17 @@ def classify_crop(crop_image):
 
 
 def run_pipeline(image_path):
+    image_path = Path(image_path)
+    if not image_path.exists():
+        return {"error": f"Image not found: {image_path}"}
 
+    if not MODEL_PATH.exists():
+        return {"error": f"Model checkpoint not found: {MODEL_PATH}"}
+
+    model, transform, detector = _load_components()
     image = Image.open(image_path).convert("RGB")
-
-    detections = detector.detect(image)
+    cv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    detections = detector.detect(cv_image)
 
     if not detections:
         return {"error": "No objects detected"}
@@ -53,13 +77,14 @@ def run_pipeline(image_path):
 
     crop = image.crop((x, y, x + w, y + h))
 
-    predicted_class, confidence = classify_crop(crop)
+    predicted_class, confidence = classify_crop(crop, model, transform)
 
+    from rag.retriever import query_rag
     query = f"What are the handling instructions for {predicted_class.lower()} items?"
     answer, context = query_rag(query, predicted_class=predicted_class)
 
     result = {
-        "image": image_path,
+        "image": str(image_path),
         "bbox": first_obj["bbox"],
         "predicted_class": predicted_class,
         "confidence": round(confidence, 4),
@@ -70,16 +95,20 @@ def run_pipeline(image_path):
     return result
 
 
-if __name__ == "__main__":
+def main():
+    parser = argparse.ArgumentParser(description="Run end-to-end warehouse pipeline")
+    parser.add_argument("--image", type=Path, default=DEFAULT_TEST_IMAGE, help="Path to input image")
+    args = parser.parse_args()
 
-    test_image = "E:\warehouse_robot_ai\data\processed\ml_dataset\test\FRAGILE\201436_84179.jpg"
-
-    if not os.path.exists(test_image):
-        print(f"Image not found: {test_image}")
-        exit()
-
-    output = run_pipeline(test_image)
+    output = run_pipeline(args.image)
+    if "error" in output:
+        print(output["error"])
+        raise SystemExit(1)
 
     print("\n=== FINAL PIPELINE OUTPUT ===")
-    for k, v in output.items():
-        print(f"{k}: {v}")
+    for key, value in output.items():
+        print(f"{key}: {value}")
+
+
+if __name__ == "__main__":
+    main()
